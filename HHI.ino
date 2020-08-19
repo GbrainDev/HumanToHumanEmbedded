@@ -1,0 +1,172 @@
+#include </Users/juyoung/Library/Arduino15/packages/esp32/hardware/esp32/1.0.4/tools/sdk/include/driver/driver/adc.h>
+#include <chrono>
+#include <thread>
+#include <math.h>
+#include <WiFi.h>
+#include <LiquidCrystal_I2C.h>
+
+// Window for RMS Envelope
+#define RMSWindow   50
+
+// WiFi Credentials
+const char* ssid = "gbrain";
+const char* password = "gbrain1908!";
+
+// LCD Settings
+const int lcdColumns = 16;
+const int lcdRows = 2;
+LiquidCrystal_I2C lcd(0x27, lcdColumns, lcdRows);
+
+
+class adcFilter
+{
+public:
+    void init(float numerator[5], float denominator[4], float filterGain, short int filterSelect);
+    void padding(short int filterSelect);
+    float notch(int newVal);
+    float lpf(float newVal);
+    int envelope(float newVal);
+private:
+    float filterNum[5];
+    float filterDen[4];
+    float gain;
+    short int filterSel;
+    float xv[5];
+    float yv[5];
+    float RMSEnv[RMSWindow];
+    float RMSSum = 0;
+};
+
+void adcFilter::init(float numerator[5], float denominator[4], float filterGain, short int filterSelect)
+{
+    // Save to filterNum
+    memcpy(filterNum, numerator, sizeof(float) * 5);
+    memcpy(filterDen, denominator, sizeof(float) * 4);
+    gain = filterGain;
+    filterSel = filterSelect;
+    padding(filterSel);
+    for (int i=0; i < RMSWindow; i++){
+      RMSEnv[i] = 0;
+    }
+}
+
+void adcFilter::padding(short int filterSelect)
+{
+    int paddingLen = 0;
+    if (filterSelect == 0) {
+        // Notch Filter
+        paddingLen = 5;
+    } else {
+        // LPF Filter
+        paddingLen = 3;
+    }
+
+    for (int i = 0; i < paddingLen; i++){
+        float adcVal = adc1_get_raw(ADC1_CHANNEL_4) * 1.0;
+        xv[i] = adcVal;
+        yv[i] = adcVal;
+        using namespace std::this_thread;
+        using namespace std::chrono;
+        sleep_for(milliseconds(2));
+    }
+}
+
+float adcFilter::notch(int newVal)
+{
+    for (int i=0; i < 4; i++){
+        xv[i] = xv[i+1];
+        yv[i] = yv[i+1];
+    }
+    xv[4] = round(newVal / gain * 10000.0) / 10000.0;
+    yv[4] = round((xv[0] + yv[0] * filterDen[0] + \
+                      xv[1] * filterNum[1] + yv[1] * filterDen[1] + \
+                      xv[2] * filterNum[2] + yv[2] * filterDen[2] + \
+                      xv[3] * filterNum[3] + yv[3] * filterDen[3] + \
+                      xv[4]) * 10000.0) / 10000.0;
+    return yv[4];
+}
+
+float adcFilter::lpf(float newVal)
+{
+    for (int i=0; i < 2; i++){
+        xv[i] = xv[i+1];
+        yv[i] = yv[i+1];
+    }
+    xv[2] = round(newVal * 10000.0 / gain) / 10000.0;
+    yv[2] = round((xv[0] + yv[0] * (-0.8371816513) + \
+                      xv[1] * (-2) + yv[1] * (1.8226949252) + \
+                      xv[2]) * 10000.0) / 10000.0;
+    return yv[2];
+}
+
+int adcFilter::envelope(float newVal)
+{
+    RMSSum -= RMSEnv[0];
+    for (int i=0; i < RMSWindow-1; i++){
+        RMSEnv[i] = RMSEnv[i+1];
+    }
+    RMSEnv[RMSWindow-1] = pow(newVal, 2) / RMSWindow;
+    RMSSum += RMSEnv[RMSWindow-1];
+    return (int) round(sqrt(RMSSum));
+}
+
+void WiFiSetup()
+{
+  // LCD
+  lcd.init();
+  lcd.backlight();
+  lcd.setCursor(0,0);
+  lcd.print("GBRAIN HHI");
+
+  // Try WiFi Connection : Empty Loop
+  // Display details on LCD
+  lcd.clear();
+  lcd.setCursor(0,0);
+  lcd.print("Connecting to : ");
+  delay(200);
+  lcd.setCursor(0, 1);
+  lcd.print(ssid);
+
+  WiFi.begin(ssid, password);
+
+  // Empty Loop until connection
+  while (WiFi.status() != WL_CONNECTED) {
+    delay(300);
+  }
+
+  // Print wifi status
+  lcd.clear();
+  delay(200);
+  lcd.setCursor(0,0);
+  lcd.print("Connected : ");
+  delay(200);
+  lcd.setCursor(0, 1);
+  lcd.print(WiFi.localIP());
+}
+
+void setup() {
+  // Serial
+  Serial.begin(115200);
+  
+  // ADC
+  adc1_config_channel_atten(ADC1_CHANNEL_4, ADC_ATTEN_DB_11);
+  adc1_config_width(ADC_WIDTH_BIT_12);
+  
+  WiFiSetup();
+  
+}
+
+void loop() {
+  float num[] = {1.2345, 1.2133, 1.3457, 1.3463, 1.2356};
+  float den[] = {1.0, 1.0, 1.0, 1.0};
+  adcFilter lpfFilt;
+  lpfFilt.init(num, den, 1.0, 1);
+  adcFilter envFilt;
+  envFilt.init(num, den, 1.0, 1);
+  int startTime = 0;
+  for (int i=0; i<10000000; i++){
+    Serial.println(envFilt.envelope(lpfFilt.lpf(adc1_get_raw(ADC1_CHANNEL_4))));
+    delayMicroseconds(1035);
+  }
+  exit(0);
+}
