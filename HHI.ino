@@ -23,6 +23,8 @@ using namespace std;
 
 #include <PubSubClient.h>
 
+#define ON_OFF_THRESHOLD  100
+
 /* ------------------ Configs ------------------ */
 
 // UART  RCV Buffer
@@ -348,7 +350,7 @@ void loop() {
         if (valSave > threshold){
             relayONCount += 1;
             relayOFFCount = 0;
-            if (relayON == false && relayONCount > 100) {
+            if (relayON == false && relayONCount > ON_OFF_THRESHOLD) {
                 //Serial.println("Relay ON!");
                 relayON = true;
                 mqtt_reconnect();
@@ -359,7 +361,7 @@ void loop() {
         } else {
             relayONCount = 0;
             relayOFFCount += 1;
-            if (relayON == true && relayOFFCount > 200) {
+            if (relayON == true && relayOFFCount > ON_OFF_THRESHOLD) {
                 //Serial.println("Relay OFF!");
                 relayON = false;
                 mqtt_reconnect();
