@@ -115,7 +115,7 @@ void WiFiSetup(const char* ssid, const char* password)
     lcd.clear();
     alternateDelay(200);
     lcd.setCursor(0,0);
-    lcd.print("Connected : ");
+    lcd.print("Connected : w");
     alternateDelay(200);
     lcd.setCursor(0, 1);
     lcd.print(WiFi.localIP());
@@ -316,13 +316,15 @@ void loop() {
 
     int threshold = 0;
 
-    for (int i=0; i<2000; i++){
+    for (int i=0; i<3000; i++){
         int val = envFilt.envelope(lpfFilt.lpf(adc1_get_raw(ADC1_CHANNEL_4)));
         if (val > threshold && i > 1000) {
             threshold = val;
         }
-        delayMicroseconds(1035);
+        delayMicroseconds(1935);
     }
+
+    threshold += 1;
 
     //Serial.println(threshold);
 
@@ -340,13 +342,19 @@ void loop() {
         for (int i=0; i < 2; i++){
           int val = envFilt.envelope(lpfFilt.lpf(adc1_get_raw(ADC1_CHANNEL_4)));
           valSave += (int) val/2;
-          delayMicroseconds(1000);
+          delayMicroseconds(1900);
         }
         
         char valChr[6];
         sprintf(valChr, "*%04d", valSave);
         uartSend(valChr);
         Serial.println(valChr);
+        /*if (uart_read_bytes(UART_NUM_1, rxBuf, 1, 1) >= 1) {
+          mqtt_reconnect();
+          char* topic_id = (char *) calloc(1, strlen(temp_topic_id) + 1);
+          client.publish(topic_id, "RST");
+          ESP.restart();
+        }*/
         if (valSave > threshold){
             relayONCount += 1;
             relayOFFCount = 0;
