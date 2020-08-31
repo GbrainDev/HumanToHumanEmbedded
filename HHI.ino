@@ -348,13 +348,13 @@ void loop() {
         char valChr[6];
         sprintf(valChr, "*%04d", valSave);
         uartSend(valChr);
-        Serial.println(valChr);
-        /*if (uart_read_bytes(UART_NUM_1, rxBuf, 1, 1) >= 1) {
+        //Serial.println(valChr);
+        if (uart_read_bytes(UART_NUM_1, rxBuf, 1, 1) >= 1) {
           mqtt_reconnect();
           char* topic_id = (char *) calloc(1, strlen(temp_topic_id) + 1);
           client.publish(topic_id, "RST");
           ESP.restart();
-        }*/
+        }
         if (valSave > threshold){
             relayONCount += 1;
             relayOFFCount = 0;
